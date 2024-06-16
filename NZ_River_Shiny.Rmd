@@ -148,6 +148,7 @@ strahler_classification <- function(final_river_segments) {
 
 generate_strahler_map <- function(connected_river_segments) {
   strahler_output <- strahler_classification(connected_river_segments)
+  
   # 将河流数据转换为 EPSG:4326 坐标系统
   strahler_output <- st_transform(strahler_output, crs = 4326)
 
@@ -185,16 +186,33 @@ generate_strahler_map <- function(connected_river_segments) {
       ~st_coordinates(geometry)[,2],
       radius = 1,
       label = ~as.character(Strahler),
-      labelOptions = labelOptions(noHide = TRUE, direction = 'auto', textOnly = TRUE)
+      labelOptions = labelOptions(
+        noHide = TRUE, 
+        direction = 'auto', 
+        textOnly = FALSE,  # 设置 textOnly 为 FALSE
+        style = list(
+          "background-color" = "gray",  # 添加灰色背景
+          "border-color" = "gray",
+          "color" = "white",
+          "font-size" = "10px",  # 调小字体大小
+          "border-radius" = "2px",  # 调小圆角
+          "padding" = "1px"  # 调小内边距
+        )
+      )
     ) %>%
-    addLegend("bottomright", pal = colors, values = strahler_levels,  # 使用整数值
-              title = "Strahler Number",
-              labFormat = labelFormat(),
-              opacity = 0.7)
+    addLegend(
+      "bottomright", 
+      pal = colors, 
+      values = strahler_levels,  # 使用整数值
+      title = "Strahler Number",
+      labFormat = labelFormat(),
+      opacity = 0.7
+    )
 
   # 显示地图
   return(map)
 }
+
 
 
 ```
@@ -258,15 +276,14 @@ generate_shreve_map <- function(connected_river_segments) {
   shreve_levels <- sort(unique(shreve_output$Shreve))
   
   # 创建颜色映射函数
-colors <- if(length(shreve_levels) <= 256) {
-  # 如果分类不超过256，使用 viridis
-  colorFactor(palette = viridis(length(shreve_levels), option = "D"), domain = shreve_levels)
-} else {
-  # 如果分类超过256，动态生成所需数量的颜色
-  color_palette <- colorRampPalette(viridis(256, option = "D"))
-  colorFactor(palette = color_palette(length(shreve_levels)), domain = shreve_levels)
-}
-
+  colors <- if(length(shreve_levels) <= 256) {
+    # 如果分类不超过256，使用 viridis
+    colorFactor(palette = viridis(length(shreve_levels), option = "D"), domain = shreve_levels)
+  } else {
+    # 如果分类超过256，动态生成所需数量的颜色
+    color_palette <- colorRampPalette(viridis(256, option = "D"))
+    colorFactor(palette = color_palette(length(shreve_levels)), domain = shreve_levels)
+  }
 
   # 使用 leaflet 创建地图
   map <- leaflet(shreve_output) %>%
@@ -278,7 +295,19 @@ colors <- if(length(shreve_levels) <= 256) {
       lat = ~st_coordinates(geometry)[,2], 
       radius = 1, 
       label = ~as.character(Shreve), 
-      labelOptions = labelOptions(noHide = TRUE, direction = 'auto', textOnly = TRUE)
+      labelOptions = labelOptions(
+        noHide = TRUE, 
+        direction = 'auto', 
+        textOnly = FALSE,  # 设置 textOnly 为 FALSE
+        style = list(
+          "background-color" = "gray",  # 添加灰色背景
+          "border-color" = "gray",
+          "color" = "white",
+          "font-size" = "12px",
+          "border-radius" = "3px",
+          "padding" = "2px"
+        )
+      )
     ) %>%
     addLegend(
       pal = colors, 
@@ -298,10 +327,10 @@ colors <- if(length(shreve_levels) <= 256) {
 
 # 确保数据已加载
 if (!exists("riverLines") || !exists("riverLines_water_quality")) {
-  riverLines <- st_read("D:/Dissertation/REC2_Layers_Shapefiles/River_Lines.shp")
+  riverLines <- st_read("./River_Lines.shp")
   riverLines <- st_as_sf(riverLines, coords = c("lon", "lat"), crs = 4326)
   
-  riverLines_water_quality <- st_read("D:/Dissertation/water_quality_shp/river-water-quality-nitrogen-modelled-2016-2020.shp")
+  riverLines_water_quality <- st_read("./river-water-quality-nitrogen-modelled-2016-2020.shp")
   riverLines_water_quality_AN <- riverLines_water_quality%>%
   select( strm_rd,measure,value,mesrmnt, nzsgmnt,climate,src_f_f,sg_lngt)%>%filter(measure == "Ammoniacal nitrogen (adjusted)")%>%
   rename(nzsegment = nzsgmnt)
@@ -316,7 +345,7 @@ riverLines_water_quality_AN_wgs84<-riverLines_water_quality_AN_wgs84%>%select(Hy
 
 riverLines_water_quality_NN_wgs84 <- st_transform(riverLines_water_quality_NN, crs = st_crs(riverLines))
 riverLines_water_quality_NN_wgs84<- riverLines %>% st_join(riverLines_water_quality_NN_wgs84, by = "nzsegment")
-riverLines_water_quality_NN_wgs84<-riverLines_water_quality__wgs84%>%select(HydroID,NextDownID,StreamOrde,measure,value,mesrmnt,geometry)
+riverLines_water_quality_NN_wgs84<-riverLines_water_quality_NN_wgs84%>%select(HydroID,NextDownID,StreamOrde,measure,value,mesrmnt,geometry)
 rm(riverLines)
 rm(riverLines_water_quality_AN)
 rm(riverLines_water_quality_NN)
@@ -475,7 +504,7 @@ server <- function(input, output, session) {
     
     hex_rivers <- st_join(hex_sf, rivers_sf, join = st_intersects) %>%
       group_by(geometry) %>%
-      summarize(Value = mean(value, na.rm = TRUE), .groups = 'drop') %>%
+      summarize(Value = round(mean(value, na.rm = TRUE),6), .groups = 'drop') %>%
       st_transform(crs = 4326)
     # 过滤掉包含 NA 值的六边形
     hex_rivers <- hex_rivers[!is.na(hex_rivers$Value), ]
@@ -594,15 +623,17 @@ shinyApp(ui = ui, server = server)
 
 
 ```{r}
-Marokopa_connected_ID
-connected_river_segments <- riverLines[riverLines$HydroID %in% Marokopa_connected_ID, ]
+connected_river_segments <- riverLines[riverLines$HydroID %in% Whakatane_connected_ID, ]
+
 # 找到StreamOrde最大的两个值
 max_stream_orders <- sort(unique(connected_river_segments$StreamOrde), decreasing = TRUE)[1:3]
 
 # 绘制线段，先绘制粗线段再绘制细线段
-plot(st_geometry(connected_river_segments), col = "lightblue", lwd = 0.5, main = "Marokopa River")
+plot(st_geometry(connected_river_segments), col = "lightblue", lwd = 0.5, main = "Whakatāne River")
 
 # 添加粗线段
 plot(st_geometry(connected_river_segments[connected_river_segments$StreamOrde %in% max_stream_orders, ]), col = "blue", lwd = 2, add = TRUE)
-```
 
+
+
+```
